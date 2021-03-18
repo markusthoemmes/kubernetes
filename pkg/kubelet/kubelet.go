@@ -1501,6 +1501,11 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	podStatus := o.podStatus
 	updateType := o.updateType
 
+	klog.InfoS("syncPod: %q", "pod", klog.KObj(pod))
+	defer func() {
+		klog.InfoS("exit syncPod: %q", "pod", klog.KObj(pod))
+	}()
+
 	// if we want to kill a pod, do it now!
 	if updateType == kubetypes.SyncPodKill {
 		killPodOptions := o.killPodOptions
@@ -2034,13 +2039,15 @@ func handleProbeSync(kl *Kubelet, update proberesults.Update, handler SyncHandle
 		klog.V(4).Infof("SyncLoop %s: ignore irrelevant update: %#v", probeAndStatus, update)
 		return
 	}
-	klog.V(1).Infof("SyncLoop %s: %q", probeAndStatus, format.Pod(pod))
+	klog.Infof("SyncLoop %s: %q", probeAndStatus, format.Pod(pod))
 	handler.HandlePodSyncs([]*v1.Pod{pod})
 }
 
 // dispatchWork starts the asynchronous sync of the pod in a pod worker.
 // If the pod has completed termination, dispatchWork will perform no action.
 func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mirrorPod *v1.Pod, start time.Time) {
+	klog.Infof("dispatchWork: %q", format.Pod(pod))
+
 	// check whether we are ready to delete the pod from the API server (all status up to date)
 	containersTerminal, podWorkerTerminal := kl.podAndContainersAreTerminal(pod)
 	if pod.DeletionTimestamp != nil && containersTerminal {

@@ -251,6 +251,7 @@ func (m *manager) UpdatePodStatus(podUID types.UID, podStatus *v1.PodStatus) {
 					// Trigger an immediate run of the readinessProbe to update ready state
 					select {
 					case w.manualTriggerCh <- struct{}{}:
+						klog.InfoS("Triggered a manual run", "probe", w.probeType.String(), "containerName", w.container.Name)
 					default: // Non-blocking.
 						klog.Warningf("Failed to trigger a manual run of %s probe", w.probeType.String())
 					}

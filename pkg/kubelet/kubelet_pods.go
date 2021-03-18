@@ -1517,7 +1517,7 @@ func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
 // generateAPIPodStatus creates the final API pod status for a pod, given the
 // internal pod status.
 func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.PodStatus) v1.PodStatus {
-	klog.V(3).InfoS("Generating pod status", "pod", klog.KObj(pod))
+	klog.InfoS("Generating pod status", "pod", klog.KObj(pod))
 
 	s := kl.convertStatusToAPIStatus(pod, podStatus)
 

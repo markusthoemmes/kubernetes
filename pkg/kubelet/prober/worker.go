@@ -181,16 +181,18 @@ func (w *worker) doProbe() (keepGoing bool) {
 	defer func() { recover() }() // Actually eat panics (HandleCrash takes care of logging)
 	defer runtime.HandleCrash(func(_ interface{}) { keepGoing = true })
 
+	klog.InfoS("enter probe", "probe", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
+
 	status, ok := w.probeManager.statusManager.GetPodStatus(w.pod.UID)
 	if !ok {
 		// Either the pod has not been created yet, or it was already deleted.
-		klog.V(3).InfoS("No status for pod", "pod", klog.KObj(w.pod))
+		klog.InfoS("No status for pod", "pod", klog.KObj(w.pod))
 		return true
 	}
 
 	// Worker should terminate if pod is terminated.
 	if status.Phase == v1.PodFailed || status.Phase == v1.PodSucceeded {
-		klog.V(3).InfoS("Pod is terminated, exiting probe worker",
+		klog.InfoS("Pod is terminated, exiting probe worker",
 			"pod", klog.KObj(w.pod), "phase", status.Phase)
 		return false
 	}
@@ -198,17 +200,18 @@ func (w *worker) doProbe() (keepGoing bool) {
 	c, ok := podutil.GetContainerStatus(status.ContainerStatuses, w.container.Name)
 	if !ok || len(c.ContainerID) == 0 {
 		// Either the container has not been created yet, or it was deleted.
-		klog.V(3).InfoS("Probe target container not found",
+		klog.InfoS("Probe target container not found",
 			"pod", klog.KObj(w.pod), "containerName", w.container.Name)
 		return true // Wait for more information.
 	}
 
 	if w.containerID.String() != c.ContainerID {
+		klog.InfoS("inequal containerID", "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 		if !w.containerID.IsEmpty() {
 			w.resultsManager.Remove(w.containerID)
 		}
 		w.containerID = kubecontainer.ParseContainerID(c.ContainerID)
-		w.resultsManager.Set(w.containerID, w.initialValue, w.pod)
+		//w.resultsManager.Set(w.containerID, w.initialValue, w.pod)
 		// We've got a new container; resume probing.
 		w.onHold = false
 	}
@@ -219,7 +222,7 @@ func (w *worker) doProbe() (keepGoing bool) {
 	}
 
 	if c.State.Running == nil {
-		klog.V(3).InfoS("Non-running container probed",
+		klog.InfoS("Non-running container probed",
 			"pod", klog.KObj(w.pod), "containerName", w.container.Name)
 		if !w.containerID.IsEmpty() {
 			w.resultsManager.Set(w.containerID, results.Failure, w.pod)
@@ -231,7 +234,7 @@ func (w *worker) doProbe() (keepGoing bool) {
 
 	// Graceful shutdown of the pod.
 	if w.pod.ObjectMeta.DeletionTimestamp != nil && (w.probeType == liveness || w.probeType == startup) {
-		klog.V(3).InfoS("Pod deletion requested, setting probe result to success",
+		klog.InfoS("Pod deletion requested, setting probe result to success",
 			"probeType", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 		if w.probeType == startup {
 			klog.InfoS("Pod deletion requested before container has fully started",
@@ -245,20 +248,25 @@ func (w *worker) doProbe() (keepGoing bool) {
 
 	// Probe disabled for InitialDelaySeconds.
 	if int32(time.Since(c.State.Running.StartedAt.Time).Seconds()) < w.spec.InitialDelaySeconds {
+		klog.InfoS("short circuit because of initial delay", "probe", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 		return true
 	}
 
 	if c.Started != nil && *c.Started {
 		// Stop probing for startup once container has started.
 		if w.probeType == startup {
+			klog.InfoS("short circuit because of started stuff", "probe", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 			return false
 		}
 	} else {
 		// Disable other probes until container has started.
 		if w.probeType != startup {
+			klog.InfoS("short circuit because of other started stuff", "probe", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 			return true
 		}
 	}
+
+	klog.InfoS("actually probing", "probe", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 
 	// TODO: in order for exec probes to correctly handle downward API env, we must be able to reconstruct
 	// the full container environment here, OR we must make a call to the CRI in order to get those environment
@@ -268,6 +276,8 @@ func (w *worker) doProbe() (keepGoing bool) {
 		// Prober error, throw away the result.
 		return true
 	}
+
+	klog.InfoS("finished probing", "probe", w.probeType, "pod", klog.KObj(w.pod), "containerName", w.container.Name)
 
 	switch result {
 	case results.Success:

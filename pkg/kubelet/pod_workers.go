@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -164,7 +164,11 @@ func (p *podWorkers) managePodLoop(podUpdates <-chan UpdatePodOptions) {
 			// Time. This ensures the worker doesn't start syncing until
 			// after the cache is at least newer than the finished time of
 			// the previous sync.
+
+			// TODO(markusthoemmes): is THIS causing us the headaches?
+			klog.InfoS("GetNewerThan", "pod", klog.KObj(update.Pod))
 			status, err := p.podCache.GetNewerThan(podUID, lastSyncTime)
+			klog.InfoS("exit GetNewerThan", "pod", klog.KObj(update.Pod))
 			if err != nil {
 				// This is the legacy event thrown by manage pod loop
 				// all other events are now dispatched from syncPodFn
@@ -201,6 +205,11 @@ func (p *podWorkers) UpdatePod(options *UpdatePodOptions) {
 	uid := pod.UID
 	var podUpdates chan UpdatePodOptions
 	var exists bool
+
+	klog.InfoS("UpdatePod", "pod", klog.KObj(pod))
+	defer func() {
+		klog.InfoS("exit UpdatePod", "pod", klog.KObj(pod))
+	}()
 
 	p.podLock.Lock()
 	defer p.podLock.Unlock()
